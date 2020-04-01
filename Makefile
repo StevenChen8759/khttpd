@@ -10,6 +10,7 @@ khttpd-objs := \
 	main.o
 
 GIT_HOOKS := .git/hooks/applied
+
 all: $(GIT_HOOKS) http_parser.c htstress
 	make -C $(KDIR) M=$(PWD) modules
 
@@ -26,6 +27,15 @@ check: all
 clean:
 	make -C $(KDIR) M=$(PWD) clean
 	$(RM) htstress
+
+PORT := 8081
+load: all
+	sudo insmod khttpd.ko port=$(PORT)
+
+unload:
+	sudo rmmod khttpd.ko
+
+reload: all unload load
 
 # Download http_parser.[ch] from nodejs/http-parser repository
 # the inclusion of standard header files such as <string.h> will be replaced
