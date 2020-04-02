@@ -31,11 +31,21 @@ clean:
 PORT := 8081
 load: all
 	sudo insmod khttpd.ko port=$(PORT)
+	$(MAKE) stat
 
 unload:
-	sudo rmmod khttpd.ko
+	-sudo rmmod khttpd.ko
 
 reload: all unload load
+
+stat:
+	@echo "------------------------------------------------------------------------"
+	-lsmod | grep khttpd
+	@echo "------------------------------------------------------------------------"
+	sudo netstat -antp
+
+request:
+	wget 127.0.0.1:$(PORT)/$(RFILE)
 
 # Download http_parser.[ch] from nodejs/http-parser repository
 # the inclusion of standard header files such as <string.h> will be replaced

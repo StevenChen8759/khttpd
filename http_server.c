@@ -12,13 +12,13 @@
 #define HTTP_RESPONSE_200_DUMMY                               \
     ""                                                        \
     "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF     \
-    "Content-Type: text/plain" CRLF "Content-Length: 12" CRLF \
-    "Connection: Close" CRLF CRLF "Hello World!" CRLF
+    "Content-Type: text/plain" CRLF "Content-Length: 32" CRLF \
+    "Connection: Close" CRLF CRLF "Hello World! Fibonacci Number!\n" CRLF
 #define HTTP_RESPONSE_200_KEEPALIVE_DUMMY                     \
     ""                                                        \
     "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF     \
-    "Content-Type: text/plain" CRLF "Content-Length: 12" CRLF \
-    "Connection: Keep-Alive" CRLF CRLF "Hello World!" CRLF
+    "Content-Type: text/plain" CRLF "Content-Length: 32" CRLF \
+    "Connection: Keep-Alive" CRLF CRLF "Hello World! Fibonacci Number.\n" CRLF
 #define HTTP_RESPONSE_501                                              \
     ""                                                                 \
     "HTTP/1.1 501 Not Implemented" CRLF "Server: " KBUILD_MODNAME CRLF \
@@ -60,8 +60,7 @@ static int http_server_send(struct socket *sock, const char *buf, size_t size)
     int done = 0;
     while (done < size) {
         struct kvec iov = {
-            .iov_base = (void *) ((char *) buf + done),
-            .iov_len = size - done,
+            .iov_base = (void *) ((char *) buf + done), .iov_len = size - done,
         };
         int length = kernel_sendmsg(sock, &msg, &iov, 1, iov.iov_len);
         if (length < 0) {
@@ -73,6 +72,8 @@ static int http_server_send(struct socket *sock, const char *buf, size_t size)
     return done;
 }
 
+
+/* TODO: Response fibonacci number here */
 static int http_server_response(struct http_request *request, int keep_alive)
 {
     char *response;
@@ -168,6 +169,7 @@ static int http_server_worker(void *arg)
     request.socket = socket;
     http_parser_init(&parser, HTTP_REQUEST);
     parser.data = &request;
+    /* Blocking receiving */
     while (!kthread_should_stop()) {
         int ret = http_server_recv(socket, buf, RECV_BUFFER_SIZE - 1);
         if (ret <= 0) {
@@ -195,6 +197,7 @@ int http_server_daemon(void *arg)
     allow_signal(SIGTERM);
 
     while (!kthread_should_stop()) {
+        // Accept connection via kernel socket API
         int err = kernel_accept(param->listen_socket, &socket, 0);
         if (err < 0) {
             if (signal_pending(current))
@@ -202,6 +205,8 @@ int http_server_daemon(void *arg)
             pr_err("kernel_accept() error: %d\n", err);
             continue;
         }
+        // Create a kernel thread for request handling - callback:
+        // http_server_worker
         worker = kthread_run(http_server_worker, socket, KBUILD_MODNAME);
         if (IS_ERR(worker)) {
             pr_err("can't create more worker process\n");
