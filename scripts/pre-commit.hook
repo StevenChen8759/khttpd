@@ -4,7 +4,7 @@ CPPCHECK_suppresses="--suppress=missingIncludeSystem \
 	             --suppress=unusedFunction:http_parser.c \
                      --suppress=duplicateBreak:http_parser.c \
                      --suppress=shadowVariable:http_parser.c"
-CPPCHECK_OPTS="-I. --enable=all --error-exitcode=1 --force $CPPCHECK_suppresses ."
+CPPCHECK_OPTS="-I. -ihttp_parser.c -v --enable=all --error-exitcode=1 --force $CPPCHECK_suppresses . "
 
 RETURN=0
 CLANG_FORMAT=$(which clang-format)
@@ -32,6 +32,7 @@ fi
 
 FILES=`git diff --cached --name-only --diff-filter=ACMR | grep -E "\.(c|cpp|h)$"`
 for FILE in $FILES; do
+    echo FILE
     nf=`git checkout-index --temp $FILE | cut -f 1`
     tempdir=`mktemp -d` || exit 1
     newfile=`mktemp ${tempdir}/${nf}.XXXXXX` || exit 1
@@ -76,7 +77,8 @@ do
 done
 
 # static analysis
-$CPPCHECK $CPPCHECK_OPTS >/dev/null
+echo $CPPCHECK $CPPCHECK_OPTS
+$CPPCHECK $CPPCHECK_OPTS  >/dev/null
 if [ $? -ne 0 ]; then
     RETURN=1
     echo "" >&2
