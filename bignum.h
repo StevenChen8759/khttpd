@@ -26,10 +26,6 @@ void bn_set_digit(bignum_t *, int);
 bignum_t *bn_add_with_malloc(bignum_t *, bignum_t *);
 
 /* Print big number in Big-endian(MSD first) */
-#ifndef KSPACE
-void bn_print(bignum_t *);
-#endif
-
 char *bn_tostring_and_free(bignum_t **);
 
 /* Free created space after usage */
