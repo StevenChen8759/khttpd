@@ -93,7 +93,7 @@ char *respmsg_edition(char *msg, int keep_alive)
     rpmsg = (char *) kcalloc(strlen(msg) + 1, sizeof(char), GFP_KERNEL);
 
     if (rpmsg == NULL) {
-        pr_error("Allocate space for response message fail...");
+        pr_err("Allocate space for response message fail...");
         return NULL;
     }
 
