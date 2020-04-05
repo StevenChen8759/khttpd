@@ -6,24 +6,28 @@
 
 #include "http_parser.h"
 #include "http_server.h"
+#include "bignum.h"
 
 #define CRLF "\r\n"
 
-#define HTTP_RESPONSE_200_DUMMY                               \
-    ""                                                        \
-    "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF     \
-    "Content-Type: text/plain" CRLF "Content-Length: 32" CRLF \
-    "Connection: Close" CRLF CRLF "Hello World! Fibonacci Number!\n" CRLF
-#define HTTP_RESPONSE_200_KEEPALIVE_DUMMY                     \
-    ""                                                        \
-    "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF     \
-    "Content-Type: text/plain" CRLF "Content-Length: 32" CRLF \
-    "Connection: Keep-Alive" CRLF CRLF "Hello World! Fibonacci Number.\n" CRLF
+#define HTTP_RESPONSE_200_DUMMY                                \
+    ""                                                         \
+    "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF      \
+    "Content-Type: text/plain" CRLF "Content-Length: %zu" CRLF \
+    "Connection: Close" CRLF CRLF "%s" CRLF
+
+#define HTTP_RESPONSE_200_KEEPALIVE_DUMMY                      \
+    ""                                                         \
+    "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF      \
+    "Content-Type: text/plain" CRLF "Content-Length: %zu" CRLF \
+    "Connection: Keep-Alive" CRLF CRLF "%s" CRLF
+
 #define HTTP_RESPONSE_501                                              \
     ""                                                                 \
     "HTTP/1.1 501 Not Implemented" CRLF "Server: " KBUILD_MODNAME CRLF \
     "Content-Type: text/plain" CRLF "Content-Length: 21" CRLF          \
     "Connection: Close" CRLF CRLF "501 Not Implemented" CRLF
+
 #define HTTP_RESPONSE_501_KEEPALIVE                                    \
     ""                                                                 \
     "HTTP/1.1 501 Not Implemented" CRLF "Server: " KBUILD_MODNAME CRLF \
@@ -72,19 +76,142 @@ static int http_server_send(struct socket *sock, const char *buf, size_t size)
     return done;
 }
 
+char *respmsg_edition(char *msg, int keep_alive)
+{
+    char *rpmsg = NULL;
+    int msgl;
+    size_t rpmsglen;
+
+    // Calculate space needed for response message return
+    // KEEPALIVE_DUMMY vs DUMMY, excluding 5 characters %zu and %s
+    rpmsglen = keep_alive ? strlen(HTTP_RESPONSE_200_KEEPALIVE_DUMMY) - 5
+                          : strlen(HTTP_RESPONSE_200_DUMMY) - 5;
+    // Add msg length into needed space
+    rpmsglen += strlen(msg);
+
+    // Probing the length of strlen(msg) and add into needed space
+    rpmsg = (char *) kcalloc(strlen(msg) + 1, sizeof(char), GFP_KERNEL);
+
+    if (rpmsg == NULL) {
+        pr_error("Allocate space for response message fail...");
+        return NULL;
+    }
+
+    msgl = snprintf(rpmsg, strlen(msg), "%zu", strlen(msg));
+    if (msgl > 0) {
+        rpmsglen += msgl;
+    }
+    kfree(rpmsg);
+
+    /* Formal allocation for response needed */
+    rpmsg = (char *) kcalloc(rpmsglen, sizeof(char), GFP_KERNEL);
+
+    /* Compose formal HTTP response */
+    msgl = keep_alive
+               ? snprintf(rpmsg, rpmsglen, HTTP_RESPONSE_200_KEEPALIVE_DUMMY,
+                          strlen(msg), msg)
+               : snprintf(rpmsg, rpmsglen, HTTP_RESPONSE_200_DUMMY, strlen(msg),
+                          msg);
+
+    pr_info("HTTP response snprintf result: %d", msgl);
+
+    return rpmsg;
+}
 
 /* TODO: Response fibonacci number here */
 static int http_server_response(struct http_request *request, int keep_alive)
 {
-    char *response;
+    char *response, *url = NULL, *ptr_n, *ptr_i, fib_s, *rpmsg = NULL;
+    long long fib_input;
+    int kres;
+    bignum_t *bn_res;
 
-    pr_info("requested_url = %s\n", request->request_url);
+    /* Allocate string space for url copying */
+    url = (char *) kcalloc(strlen(request->request_url), sizeof(char),
+                           GFP_KERNEL);
+
+    /* Prevent allocation fail case*/
+    if (url == NULL) {
+        pr_err("Allocate url space fail!");
+        goto rsp;  // Response allocation error directly
+    }
+
+    /* Copying URL */
+    strncpy(url, request->request_url + 1, strlen(request->request_url));
+    ptr_n = url;
+
+    pr_info("requested_url = %s, len = %zu\n", request->request_url,
+            strlen(request->request_url));
+
+    /* Seperate instruction pattern and requested number pattern */
+    /* Note: ptr_i for instruction pattern, ptr_n for number pattern */
+    ptr_i = strsep(&ptr_n, "/");
+
+    pr_info("sep / -> number: %s, instruction: %s\n", ptr_n, ptr_i);
+
+    /* Check if the instruction pattern is matched... */
+    if (strncmp(ptr_i, "fib", 3) == 0 && strlen(ptr_i) == 3) {
+        /* Transfer input number to type long long (fit bn_fibonacci(long long))
+         */
+        kres = kstrtoll(ptr_n, 10, &fib_input);
+
+        /* Calculate fibonacci number while return success */
+        if (kres == 0) {
+            /* CPU bound task, disable preemption for better performance */
+            preempt_disable();
+
+            /* Calculate fibonacci number */
+            bn_res = bn_fibonacci(fib_input);
+
+            /* Enable preemption */
+            preempt_enable();
+
+        } else {
+            pr_err("Input to long long fail, fail code: %d", kres);
+        }
+
+    } else {
+        pr_err("Pattern fib is NOT matched!");
+    }
+
+//----------------------------------------Allo----------------------------------------
+// Integrate response message to formal HTTP response!
+
+rsp:
+
+    if (url == NULL) {
+        rpmsg = (char *) kcalloc(sizeof("Allocate url space fail!\n"),
+                                 sizeof(char), GFP_KERNEL);
+        strncat(rpmsg, "Allocate url space fail!\n",
+                sizeof("Allocate url space fail!\n"));
+    } else {
+        // rpmsg = (char *) kcalloc(sizeof("Calculate fibonacci number!"),
+        // sizeof(char), GFP_KERNEL);
+        // strncat(rpmsg, "Calculate fibonacci number!\n", sizeof("Calculate
+        // fibonacci number!\n"));
+        rpmsg = bn_tostring_and_free(&bn_res);
+    }
+
+    // pr_info("%s, %zu", rpmsg, strlen(rpmsg));
+
     if (request->method != HTTP_GET)
         response = keep_alive ? HTTP_RESPONSE_501_KEEPALIVE : HTTP_RESPONSE_501;
-    else
-        response = keep_alive ? HTTP_RESPONSE_200_KEEPALIVE_DUMMY
-                              : HTTP_RESPONSE_200_DUMMY;
-    http_server_send(request->socket, response, strlen(response));
+    else {
+        response = respmsg_edition(rpmsg, keep_alive);
+        /*if (response != NULL) kfree(response);
+        response = keep_alive ?  HTTP_RESPONSE_200_KEEPALIVE_DUMMY
+                              :  HTTP_RESPONSE_200_DUMMY;*/
+    }
+
+    if (response != NULL)
+        http_server_send(request->socket, response, strlen(response));
+
+    if (url != NULL)
+        kfree(url);
+    if (rpmsg != NULL)
+        kfree(rpmsg);
+    if (request->method == HTTP_GET && response != NULL)
+        kfree(response);
     return 0;
 }
 
