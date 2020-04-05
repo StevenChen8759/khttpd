@@ -8,7 +8,7 @@ typedef struct BLT {
 } bnlist_t;
 
 typedef struct {
-    int cnt_d;
+    size_t cnt_d;
     bnlist_t *msd;
     bnlist_t *lsd;
 } bignum_t;
@@ -20,7 +20,7 @@ bignum_t *bn_create(void);
 bignum_t *bn_fibonacci(long long);
 
 /* Allocate digit nodes to specific input number */
-void bn_set_digit(bignum_t *, int);
+void bn_set_digit(bignum_t *, size_t);
 
 /* Add two big number with new memory space allocation */
 bignum_t *bn_add_with_malloc(bignum_t *, bignum_t *);

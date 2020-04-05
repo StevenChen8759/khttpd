@@ -181,7 +181,7 @@ bignum_t *bn_add_with_malloc(bignum_t *src_1, bignum_t *src_2)
     return des;
 }
 
-void bn_set_digit(bignum_t *bnum, int digit)
+void bn_set_digit(bignum_t *bnum, size_t digit)
 {
     /* TODO: Consider allocation fail case! */
 
