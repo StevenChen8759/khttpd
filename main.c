@@ -93,9 +93,6 @@ static void close_listen_socket(struct socket *socket)
 
 static int __init khttpd_init(void)
 {
-    // bignum_t *fibn = bn_fibonacci(60);
-    // pr_info("fibnum is : %s", bn_tostring_and_free(&fibn));
-    // bn_free(fibn);
     int err = open_listen_socket(port, backlog, &listen_socket);
     if (err < 0) {
         pr_err("can't open listen socket\n");
