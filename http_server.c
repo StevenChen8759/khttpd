@@ -83,9 +83,10 @@ char *respmsg_edition(char *msg, int keep_alive)
     size_t rpmsglen;
 
     // Calculate space needed for response message return
-    // KEEPALIVE_DUMMY vs DUMMY, excluding 5 characters %zu and %s
-    rpmsglen = keep_alive ? strlen(HTTP_RESPONSE_200_KEEPALIVE_DUMMY) - 5
-                          : strlen(HTTP_RESPONSE_200_DUMMY) - 5;
+    // KEEPALIVE_DUMMY (105) vs DUMMY(100) -> for avoiding cppcheck false
+    // trigger
+    rpmsglen = keep_alive ? 105 : 100;
+
     // Add msg length into needed space
     rpmsglen += strlen(msg);
 
@@ -150,24 +151,27 @@ static int http_server_response(struct http_request *request, int keep_alive)
     pr_info("sep / -> number: %s, instruction: %s\n", ptr_n, ptr_i);
 
     /* Check if the instruction pattern is matched... */
-    if (strncmp(ptr_i, "fib", 3) == 0 && strlen(ptr_i) == 3) {
-        /* Transfer input number to type long long (fit bn_fibonacci(long long))
+    if (strncmp(ptr_i, "fib", 4) == 0) {
+        /* Transfer input number (dec.) to type long long (fit bn_fibonacci(long
+         * long))
          */
         kres = kstrtoll(ptr_n, 10, &fib_input);
 
         /* Calculate fibonacci number while return success */
         if (kres == 0) {
             /* CPU bound task, disable preemption for better performance */
-            preempt_disable();
+            // preempt_disable();
 
             /* Calculate fibonacci number */
-            bn_res = bn_fibonacci(fib_input);
+            bn_res = bn_fibonacci_fd(fib_input);
 
             /* Casting bignum_t to string */
-            rpmsg = bn_tostring_and_free(&bn_res);
+            rpmsg = bn_tostring(&bn_res);
+
+            bn_free(&bn_res);
 
             /* Enable preemption */
-            preempt_enable();
+            // preempt_enable();
 
         } else {
             // pr_err("Input to long long fail, fail code: %d", kres);
